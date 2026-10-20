@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zipper Merge Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&family=Overpass+Mono:wght@400;600&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a work-zone field sheet. Control strip on top, four lanes-eye strips (freeway pair, urban pair), method notes below. */
+:root {
+  --bg: #eceff1;
+  --surface: #ffffff;
+  --ink: #15191d;
+  --ink-2: #47505a;
+  --muted: #6b747e;
+  --line: #d2d8dd;
+  --accent: #d2600a;       /* work-zone orange */
+  --accent-ink: #9c4300;   /* orange for small text */
+  --accent-soft: #fbe6d4;
+  --asphalt: #3a3f45;
+  --good: #1f7a3a;
+  --bad: #b3261e;
+  --font-display: "Overpass", "Highway Gothic", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Overpass Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101316; --surface: #181c20; --ink: #e8ecef; --ink-2: #b4bdc5; --muted: #87919a;
+    --line: #2b3238; --accent: #f08a2c; --accent-ink: #f6a256; --accent-soft: #3a2614;
+    --asphalt: #2c3136; --good: #5cc97c; --bad: #ff8a80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101316; --surface: #181c20; --ink: #e8ecef; --ink-2: #b4bdc5; --muted: #87919a;
+  --line: #2b3238; --accent: #f08a2c; --accent-ink: #f6a256; --accent-soft: #3a2614;
+  --asphalt: #2c3136; --good: #5cc97c; --bad: #ff8a80; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.55 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: 22px; font-weight: 800; }
+h3 { font-size: 17px; font-weight: 800; }
+p { margin: 0; }
+.eyebrow { font: 600 12px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); }
+.lede { max-width: 68ch; color: var(--ink-2); font-size: 16px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+header.top { display: grid; gap: 10px; }
+
+/* Controls */
+.controls {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; padding: 20px;
+}
+@media (max-width: 820px) { .controls { grid-template-columns: minmax(0, 1fr); } }
+.sliders { display: grid; gap: 16px; }
+.ctl { display: grid; gap: 4px; }
+.ctl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.ctl label { font: 600 14px/1.2 var(--font-display); }
+.ctl output { font: 600 13px/1 var(--font-mono); color: var(--accent-ink); white-space: nowrap; }
+.ctl .hint { font-size: 12.5px; color: var(--muted); }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.ends { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: 600 13px/1 var(--font-display); color: var(--ink); background: transparent;
+  border: 1px solid var(--line); border-radius: 4px; padding: 9px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.clock { font: 600 14px/1 var(--font-mono); color: var(--ink-2); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.dist { display: grid; gap: 8px; align-content: start; }
+.dist canvas { width: 100%; height: 130px; display: block; touch-action: none; cursor: crosshair; }
+.readout { font-size: 13px; color: var(--ink-2); min-height: 4.6em; }
+.readout b { color: var(--ink); font-weight: 600; }
+
+/* Scenario sections */
+section.ctx { display: grid; gap: 14px; }
+.ctx-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 6px 20px; }
+.ctx-head .spec { font: 400 12.5px/1.4 var(--font-mono); color: var(--muted); }
+.pair { display: grid; gap: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 14px 12px; display: grid; gap: 8px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.panel-head .cap { font-size: 13px; color: var(--muted); }
+.tag { font: 800 11px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; padding: 4px 6px; border-radius: 3px; }
+.tag.z { background: var(--accent); color: #fff; }
+.tag.c { border: 1px solid var(--ink-2); color: var(--ink-2); }
+.panel canvas { width: 100%; height: 104px; display: block; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 6px 14px; margin: 0; }
+.stats div { display: grid; gap: 1px; }
+.stats dt { font-size: 11.5px; color: var(--muted); letter-spacing: .02em; }
+.stats dd { margin: 0; font: 600 16px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.road-ctl { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+.verdict { border-left: 3px solid var(--accent); padding: 8px 12px; background: var(--accent-soft); border-radius: 0 4px 4px 0; font-size: 14px; }
+.verdict ul { margin: 4px 0 0; padding-left: 18px; }
+.verdict .better { color: var(--good); font-weight: 600; }
+.verdict .worse { color: var(--bad); font-weight: 600; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 8px; border-radius: 2px; display: inline-block; }
+
+/* Method */
+.method { display: grid; gap: 18px; max-width: 900px; }
+.method p, .method li { max-width: 72ch; color: var(--ink-2); }
+.method ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.eq { font: 400 13.5px/1.6 var(--font-mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; overflow-x: auto; white-space: pre; color: var(--ink); }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
+th, td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 12px/1.2 var(--font-display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+td.mono { white-space: nowrap; }
+a { color: var(--accent-ink); }
+details summary { cursor: pointer; font: 800 18px/1.3 var(--font-display); }
+details[open] summary { margin-bottom: 14px; }
+footer { font-size: 12.5px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <span class="eyebrow">Work zone lane closure · 2 lanes to 1</span>
+  <h1>Zipper Merge Lab</h1>
+  <p class="lede">Four simulated lane closures running side by side, all fed the same stream of drivers. Change how polite or pushy the drivers are, how many follow the zipper signs, and how heavy traffic is. Then watch where the queue goes.</p>
+</header>
+
+<section class="controls" aria-label="Simulation controls">
+  <div class="sliders">
+    <div class="ctl">
+      <div class="ctl-head"><label for="mu">Driver mix</label><output id="muOut"></output></div>
+      <input type="range" id="mu" min="-1.2" max="1.2" step="0.1" value="0">
+      <div class="ends"><span>Gives way</span><span>Fights for space</span></div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-head"><label for="sigma">How different drivers are from each other</label><output id="sigmaOut"></output></div>
+      <input type="range" id="sigma" min="0.2" max="1.6" step="0.1" value="1">
+      <div class="ends"><span>Everyone similar</span><span>Wide spread</span></div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-head"><label for="comply">Drivers who follow the zipper signs</label><output id="complyOut"></output></div>
+      <input type="range" id="comply" min="0" max="100" step="5" value="80">
+      <div class="hint">Zipper panels only. Followers use both lanes to the taper and, in the open lane, take turns letting one car in. How often they actually let someone in still depends on how assertive they are. Everyone else merges early out of habit and treats a late merger as a cutter. The most aggressive drivers ride the closing lane to the end in every panel.</div>
+    </div>
+    <p class="hint" style="font-size:12.5px;color:var(--muted)">Slider changes apply to vehicles arriving from now on. The metrics cover the last 5 simulated minutes, so at 10× give them about 30 seconds to settle. "New drivers" restarts with the current settings.</p>
+    <div class="presets" role="group" aria-label="Presets">
+      <button data-preset="textbook">Textbook</button>
+      <button data-preset="real" aria-pressed="true">Real world</button>
+      <button data-preset="friday">Friday 5 pm</button>
+      <button data-preset="sunday">Sunday drive</button>
+    </div>
+    <div class="transport">
+      <button id="play" aria-pressed="true">Pause</button>
+      <button data-speed="1">1×</button>
+      <button data-speed="5" aria-pressed="true">5×</button>
+      <button data-speed="10">10×</button>
+      <button id="restart">New drivers</button>
+      <span class="clock" id="clock">0:00</span>
+    </div>
+  </div>
+  <div class="dist">
+    <div class="ctl-head"><h3>Who's on the road</h3><span class="ctl output mono" style="font-size:12px;color:var(--muted)">hover the curve</span></div>
+    <canvas id="bell" aria-label="Distribution of driver assertiveness, defensive to aggressive"></canvas>
+    <div class="readout" id="readout"></div>
+    <div class="legend">
+      <span><i class="sw" style="background:#3f7fd6"></i>Defensive</span>
+      <span><i class="sw" style="background:#cfd0ca"></i>Average</span>
+      <span><i class="sw" style="background:#e0442f"></i>Aggressive</span>
+      <span><i class="sw" style="background:#ff3b30;width:4px"></i>Brake lights</span>
+      <span><i class="sw" style="background:transparent;border:2px solid #ffd23f;border-radius:50%;width:10px;height:10px"></i>Forced merge</span>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--ink-2);width:7px;height:6px"></i>Car / light-duty 4.8 m</span>
+      <span><i class="sw" style="background:var(--ink-2);width:15px;height:8px"></i>Single-unit truck 10 m</span>
+      <span><i class="sw" style="background:var(--ink-2);width:32px;height:8px"></i>Tractor-semitrailer 21 m</span>
+    </div>
+  </div>
+</section>
+
+<section class="ctx" id="freeway">
+  <div class="ctx-head">
+    <h2>Freeway work zone</h2>
+    <span class="spec" id="fwySpec"></span>
+  </div>
+  <div class="road-ctl" aria-label="Freeway road settings">
+    <div class="ctl">
+      <div class="ctl-head"><label for="fwyDemand">Demand</label><output id="fwyDemandOut"></output></div>
+      <input type="range" id="fwyDemand" min="400" max="2000" step="50" value="1500">
+      <div class="hint" id="fwyCapHint"></div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-head"><label for="fwySpeed">Speed and taper</label><output id="fwySpeedOut"></output></div>
+      <input type="range" id="fwySpeed" min="80" max="120" step="10" value="80">
+      <div class="hint">Taper follows OTM Book 7 freeway: 220 m at 80, 250 m at 90, 300 m at 100–110 km/h. 120 uses the 110 value.</div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-head"><label for="fwyHv">Heavy vehicles</label><output id="fwyHvOut"></output></div>
+      <input type="range" id="fwyHv" min="0" max="30" step="1" value="12">
+      <div class="hint">Split 35% single-unit, 65% tractor-semitrailer</div>
+    </div>
+  </div>
+  <div class="pair">
+    <article class="panel" data-ctx="freeway" data-mode="zipper">
+      <div class="panel-head"><span class="tag z">Zipper</span><span class="cap">"Use both lanes · Merge here · Take turns" at the start of the taper</span></div>
+      <canvas></canvas><dl class="stats"></dl>
+    </article>
+    <article class="panel" data-ctx="freeway" data-mode="conv">
+      <div class="panel-head"><span class="tag c">Conventional</span><span class="cap">"Right lane closed ahead" · most drivers merge early</span></div>
+      <canvas></canvas><dl class="stats"></dl>
+    </article>
+  </div>
+  <div class="verdict" id="vFreeway">Warming up…</div>
+</section>
+
+<section class="ctx" id="urban">
+  <div class="ctx-head">
+    <h2>Urban arterial</h2>
+    <span class="spec" id="urbSpec"></span>
+  </div>
+  <div class="road-ctl" aria-label="Urban road settings">
+    <div class="ctl">
+      <div class="ctl-head"><label for="urbDemand">Demand</label><output id="urbDemandOut"></output></div>
+      <input type="range" id="urbDemand" min="200" max="1600" step="50" value="1450">
+      <div class="hint" id="urbCapHint"></div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-head"><label for="urbSpeed">Speed and taper</label><output id="urbSpeedOut"></output></div>
+      <input type="range" id="urbSpeed" min="40" max="70" step="10" value="50">
+      <div class="hint">Taper follows OTM Book 7: 60 m at 50, 85 m at 60, 155 m at 70 km/h. 40 uses the 50 value.</div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-head"><label for="urbHv">Heavy vehicles</label><output id="urbHvOut"></output></div>
+      <input type="range" id="urbHv" min="0" max="15" step="1" value="3">
+      <div class="hint">Split 70% single-unit, 30% tractor-semitrailer</div>
+    </div>
+  </div>
+  <div class="pair">
+    <article class="panel" data-ctx="urban" data-mode="zipper">
+      <div class="panel-head"><span class="tag z">Zipper</span><span class="cap">Both lanes to a short merge point</span></div>
+      <canvas></canvas><dl class="stats"></dl>
+    </article>
+    <article class="panel" data-ctx="urban" data-mode="conv">
+      <div class="panel-head"><span class="tag c">Conventional</span><span class="cap">"Lane ends" · drivers pick the through lane at the signal</span></div>
+      <canvas></canvas><dl class="stats"></dl>
+    </article>
+  </div>
+  <div class="verdict" id="vUrban">Warming up…</div>
+</section>
+
+<section class="method">
+  <details>
+    <summary>How the model works, and what it can't tell you</summary>
+    <div style="display:grid;gap:18px">
+      <p>Each car is driven by standard microsimulation models: the Intelligent Driver Model (IDM) for following and MOBIL for lane changes. They are standard published models with the same structure as commercial tools: Vissim uses Wiedemann car-following and Aimsun uses Gipps, so the details differ. One trait, <b>assertiveness <i>z</i></b>, is drawn for every driver from a normal (bell) curve. It sets all of that driver's parameters together, so a pushy driver tailgates, accepts tight gaps and rarely lets anyone in. This is a simplification of the common practice of defining aggressive, normal and conservative driver types. Vissim, for example, uses separate behaviour parameter sets and distributions rather than one linked trait.</p>
+
+      <h3>Car following (IDM)</h3>
+<div class="eq">a = a_max · [ 1 − (v/v₀)⁴ − (s*/s)² ]
+s* = s₀ + v·T + v·Δv / (2·√(a_max·b))</div>
+
+      <h3>Lane changing (MOBIL) and forced merges</h3>
+<div class="eq">Change if   ã_c − a_c + p·(ã_n − a_n + ã_o − a_o) > Δa_th      (Δa_th = 0.4 m/s²)
+Safe only if  ã_n ≥ −b_safe,eff
+
+b_safe,eff = b_safe · [ 1 + 0.6·max(0, 1 − d_end/L_urg) + min(1, t_wait/10) ]   (capped at 6.5 m/s²)</div>
+      <p>The closing lane is a mandatory change. As a driver gets closer to the end of the lane (<span class="mono">d_end</span>), or waits there stopped (<span class="mono">t_wait</span>), they accept harder braking from the car they cut in front of. That is the forced merge described by Hidas (2005) and in the FHWA NGSIM cooperative/forced merge work. A merge that makes the new follower brake harder than 3 m/s² is counted as a <b>forced merge</b>.</p>
+
+      <h3>Giving way vs. fighting for space</h3>
+<div class="eq">P(yield) = 1 / (1 + e^(1.8·(z − c)))
+
+c = 1.5    zipper panel, driver follows the signs (taking turns is the norm)
+c = −0.3   merger is a late "cutter": conventional panel, or a zipper driver who ignores the signs
+c −= 1.2   if this driver let someone in within the last 15 s</div>
+      <p>In the conventional panels, only the through-lane driver directly behind a merger (within 30 m freeway, 20 m urban) decides whether to yield, as with Vissim's cooperative braking. If a merger has been stopped for more than 60 s, the driver behind always makes room, so nobody, truck or car, waits forever. In the zipper panels the stopped-lead-car rule below does the same job.</p>
+      <p><b>Zipper turn-taking</b> (zipper panels only). The compliance slider sets, for every driver in either lane, whether they follow the zipper signs. Merging alternates one from each lane. Right after a closing-lane car merges, it is the open lane's turn. Once the next through car draws alongside the lead closing-lane car, it is the closing lane's turn. The through-lane driver directly behind the lead car then decides whether to let it in, and starts holding back from about 12 m plus 1.5 s of travel. A sign follower uses c = 1.5, so at z = 0 they give way 94% of the time, at z = 1 about 71%, and at z = 2 about 29%. A driver ignoring the signs uses the cutter curve, so at z = 0 they give way about 37% of the time. A compliant closing-lane driver waits for their turn unless there is a clear gap, has waited more than 90 s, or has z above 1.3. Closing-lane drivers who find a through car alongside drop back and tuck in behind it.</p>
+      <p><b>A stopped lead car gets let in.</b> When the lead car in the closing lane is stopped at the end of the lane, the through-lane driver behind it decides again every 6 s. Each time, the pressure to let it in grows: the yield curve shifts by up to 2 units of assertiveness after 20 s of waiting. Even fairly pushy drivers usually give way after a short wait, while the most aggressive can still refuse. A driver who has started making room keeps holding back until the car is in, and will brake up to 4 m/s² to let it in. This applies in both panels. Otherwise, a driver who yields brakes for the merger up to 3 m/s² (Vissim's default limit), or up to 4 m/s² in the zipper panels. A driver who refuses and has <i>z</i> above 0.5 closes the gap by cutting their headway to 55%. This rule is a behavioural assumption, not a calibrated one. It encodes the fairness effect agencies report: drivers let people in when everyone is taking turns, and block when they think someone is jumping the line.</p>
+
+      <h3>Parameter mapping</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Parameter</th><th>Formula</th><th>Defensive (z = −1.5)</th><th>Average (0)</th><th>Aggressive (+1.5)</th><th>Basis</th></tr></thead>
+        <tbody id="ptable"></tbody>
+      </table></div>
+
+      <h3>Capacity calibration</h3>
+      <p>Capacity here means the highest flow the single open lane can sustain, in vehicles per hour. In a work zone the useful number is the <b>queue discharge rate</b>: the flow through the merge once a queue has formed. It is lower than the flow at speed just before breakdown. The model's mean headway, standstill gap and acceleration were tuned so that a car-only stream at the default speeds discharges at:</p>
+      <div class="tbl"><table>
+        <thead><tr><th></th><th>Target</th><th>Model, car only (8 seeds)</th><th>Model, default trucks (8 seeds)</th></tr></thead>
+        <tbody>
+          <tr><td>Freeway 2→1</td><td class="mono">1,600 pc/h/ln</td><td class="mono">≈ 1,650 veh/h avg<br>zipper 1,590 · conv. 1,705</td><td class="mono">≈ 1,470 veh/h at 12%<br>zipper 1,375 · conv. 1,560<br>(HCM estimate 1,430)</td></tr>
+          <tr><td>Urban 2→1</td><td class="mono">1,400 pc/h/ln</td><td class="mono">≈ 1,435 veh/h avg<br>zipper 1,495 · conv. 1,370</td><td class="mono">≈ 1,360 veh/h at 3%<br>zipper 1,435 · conv. 1,280<br>(HCM estimate 1,360)</td></tr>
+        </tbody>
+      </table></div>
+      <p>The freeway target is the commonly used base capacity for a short-term 2-to-1 freeway work zone (HCM; Krammes &amp; Lopez). The urban target is an assumption: lower speed, a short taper and a signal just upstream. Replace it with a local value where you have one. The v/c readout divides demand by the target adjusted for trucks, using the HCM heavy-vehicle factor with E<sub>T</sub> = 2.0. On the freeway the model's trucks behave close to the HCM value of E<sub>T</sub> = 2.0. The driver mix also moves real capacity: pushy drivers run shorter headways and push it up, polite ones pull it down. Closing-lane drivers in the merge zone match the through lane's speed and ease back into the next gap, so they merge while still rolling. With strict turn-taking in place, the freeway zipper discharges about 7–12% below the conventional layout, and the urban zipper about 9–12% above it. The urban result held up in every version of the model. The freeway penalty does not: it comes from courteous drivers slowing the open lane at the taper. It is sensitive to how early through drivers react, and it is larger than field studies suggest, so treat it as a modelling outcome rather than a finding.</p>
+
+      <h3>Heavy vehicles and work zone geometry</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Class</th><th>Length × width</th><th>Behaviour vs. the same driver in a car</th><th>Basis</th></tr></thead>
+        <tbody>
+          <tr><td>Car / light-duty</td><td class="mono">4.8 × 1.9 m</td><td>Driver parameters as drawn</td><td>Typical passenger vehicle; AASHTO P design vehicle is 5.8 m</td></tr>
+          <tr><td>Single-unit truck</td><td class="mono">10 × 2.6 m</td><td>T +0.3 s, s₀ +0.5 m, a ≈ 0.8 m/s², b 1.8, v₀ ≤ 110 km/h</td><td>AASHTO SU-30 9.1 m, SU-40 12.0 m; TAC MSU</td></tr>
+          <tr><td>Tractor-semitrailer</td><td class="mono">21 × 2.6 m</td><td>T +0.5 s, s₀ +0.5 m, a ≈ 0.5 m/s², b 1.5, v₀ ≤ 105 km/h</td><td>AASHTO WB-62 21.0 m (TAC WB-20 ≈ 22 m); Ontario 105 km/h truck speed limiter</td></tr>
+        </tbody>
+      </table></div>
+      <p>Merging around trucks: through-lane drivers give way to a merging truck more readily (yield curve shifted by 0.8). Merging drivers won't cut in if it would make a truck brake harder than 1.5 m/s². Both match driver-behaviour findings at merges (Kondyli &amp; Elefteriadou). Heavy vehicle defaults are 12% on the freeway and 3% urban, in line with commonly used HCM-style defaults. Ontario 400-series corridors often run well above that, so use local MTO counts where you have them. The single-unit / tractor-trailer split (35/65 freeway, 70/30 urban) is an assumption.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>OTM Book 7 (Apr 2022)</th><th colspan="5">Taper length for full lane closure, by normal posted regulatory speed</th></tr></thead>
+        <tbody>
+          <tr><td>Non-freeway (short/long duration)</td><td class="mono">50: 60 m</td><td class="mono">60: 85 m</td><td class="mono">70: 155 m</td><td class="mono">80: 180 m</td><td class="mono">90: 200 m</td></tr>
+          <tr><td>Freeway</td><td class="mono">80: 220 m</td><td class="mono">90: 250 m</td><td class="mono">100: 300 m</td><td class="mono">110: 300 m</td><td></td></tr>
+        </tbody>
+      </table></div>
+      <p>OTM sizes tapers on the normal posted speed. The page uses one speed slider for both the operating speed and the taper, so the layout always matches a real OTM setup. Speeds outside the OTM table (40 km/h urban, 120 km/h freeway) use the nearest table value. In the model, a closing-lane vehicle can roll into the first third of the taper while it shifts over, staying on the open side of the cone line. It must be in the through lane by then. A longer taper therefore gives a little more room to complete a rolling merge.</p>
+
+      <h3>Scenario rules</h3>
+      <ul>
+        <li><b>Merge point.</b> Zipper-compliant drivers stay in their lane until the last 60 m before the taper (25 m urban), then merge in turn, at the latest a third of the way into the taper. Drivers who plan to merge late pick whichever lane is moving better upstream, so the two lanes stay balanced.</li>
+        <li><b>Early vs. late mergers.</b> In conventional panels, drivers with <i>z</i> &gt; 1 (about 16% at an average mix) ride the closing lane to the end. Everyone else looks for a gap as soon as they enter. In zipper panels, the share set by the compliance slider uses both lanes too.</li>
+        <li><b>Same drivers.</b> Each zipper/conventional pair gets the same arrival times and the same drivers. Only the signage and the behaviour it prompts differ.</li>
+        <li><b>Urban.</b> The upstream signal releases platoons (70 s cycle, 36 s green, 1.9 s saturation headway per lane). Green time lost because the queue has backed up to the stop bar is counted as spillback.</li>
+        <li><b>Queue length</b> runs from the merge point back to the last slow car (under 30 km/h on the freeway, under 11 km/h urban). It adds any backup past the left edge of the view, at 7 m per stopped car. In conventional panels most of that backup sits upstream, where drivers merged early into one long line.</li>
+      </ul>
+
+      <h3>Limits</h3>
+      <ul>
+        <li>Not calibrated to a site. Use it for direction and mechanism, not for design numbers.</li>
+        <li>Three vehicle classes with simple adjustments, one lane-change duration, no grades, no driveways or turning traffic in the urban case.</li>
+        <li>Results vary between runs. Press "New drivers" a few times before declaring victory.</li>
+        <li>Trucks still merge less smoothly than cars at the zipper merge point, because they need long gaps. Near capacity on the freeway, the zipper queues longer and loses some throughput compared with conventional, most of all with very polite, highly compliant drivers. That is a property of this model's courtesy rules, not an established result.</li>
+        <li>The field evidence on throughput is mixed. MnDOT found no travel-time effect, and Iowa TPF-5(438) found better use of capacity. In the urban case the model agrees: the zipper shortens the queue and gains a little throughput. On the freeway it is less favourable to the zipper than the field studies.</li>
+      </ul>
+
+      <h3>Sources</h3>
+      <ul>
+        <li>Treiber, Hennecke &amp; Helbing (2000), Intelligent Driver Model, <i>Phys. Rev. E</i> 62.</li>
+        <li><a href="https://journals.sagepub.com/doi/abs/10.3141/1999-10" target="_blank" rel="noopener">Kesting, Treiber &amp; Helbing (2007), MOBIL, <i>TRR</i> 1999</a></li>
+        <li>Hidas (2005), Modelling vehicle interactions in microscopic simulation of merging and weaving, <i>Transp. Res. C</i> 13(1).</li>
+        <li><a href="https://www.fhwa.dot.gov/publications/research/operations/07030/07030.pdf" target="_blank" rel="noopener">FHWA-HRT-07-030, NGSIM cooperative/forced freeway merge model</a></li>
+        <li><a href="https://dspace.mit.edu/handle/1721.1/34607" target="_blank" rel="noopener">Lee (2006), MIT, merging model covering normal, forced and cooperative merges</a></li>
+        <li><a href="https://wisconsindot.gov/dtsdManuals/traffic-ops/manuals-and-standards/teops/16-20att6.3.pdf" target="_blank" rel="noopener">WisDOT Vissim guidelines (CC1 default 0.9 s, range 0.7–3.0 s)</a> · <a href="https://dotd.la.gov/media/ggmgprf1/vissim-calibration.pdf" target="_blank" rel="noopener">LaDOTD Vissim calibration</a></li>
+        <li><a href="https://www.owensound.ca/media/wcefhy1b/otm-book-7-temporary-conditions-field-edition-april-2022.pdf" target="_blank" rel="noopener">Ontario Traffic Manual Book 7, Temporary Conditions, Field Edition (April 2022)</a>: taper tables for TL and freeway layouts</li>
+        <li><a href="https://nap.nationalacademies.org/read/27236/chapter/4" target="_blank" rel="noopener">AASHTO design vehicle dimensions (via NCHRP)</a> · <a href="https://www.worldtransitresearch.info/research/162" target="_blank" rel="noopener">Zegeer et al., NCHRP 599 default values</a></li>
+        <li><a href="https://publications.iowa.gov/52208" target="_blank" rel="noopener">Iowa DOT TPF-5(438), Improving the Effectiveness of Zipper Merge (2024)</a></li>
+        <li><a href="https://www.dot.state.mn.us/trafficeng/workzone/doc/When-latemerge-zipper.pdf" target="_blank" rel="noopener">MnDOT, Late Merge / Zipper System</a></li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<footer>Illustrative microsimulation. IDM + MOBIL with a single assertiveness trait. Not a substitute for a calibrated site model.</footer>
+</div>
+
+<script>
+(() => {
+'use strict';
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const sigmoid = x => 1 / (1 + Math.exp(-x));
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gauss(r) { let u = 0; while (u === 0) u = r(); const v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+function pairRand(a, b) { let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+
+// ---- Parameters ----
+const P = { mu: 0, sigma: 1, comply: 0.8 };
+const PRESETS = {
+  textbook: { vc: 1.05, mu: -0.4, sigma: 0.5, comply: 95 },
+  real:     { vc: 1.05, mu: 0,    sigma: 1.0, comply: 80 },
+  friday:   { vc: 1.15, mu: 0.7,  sigma: 1.1, comply: 50 },
+  sunday:   { vc: 0.55, mu: -0.4, sigma: 0.8, comply: 80 },
+};
+// xEnd = start of the lane closure taper: the last point a closing-lane vehicle can occupy
+const CTX = {
+  freeway: { vLimit: 80 / 3.6, taper: 220, hv: 0.12, medShare: 0.35, laneW: 3.75, coneSp: 24, xEnd: 1850, zone: 60, urgLen: 250, look: 30, Tb: 1.35, capPc: 1600, demand: 1500, gapTol: 400, signal: null, viewUp: 520, minPx: 0.8, tick: 100, discMargin: 150 },
+  urban:   { vLimit: 50 / 3.6, taper: 60, hv: 0.03, medShare: 0.70, laneW: 3.5, coneSp: 6, xEnd: 230, zone: 25, urgLen: 60, look: 20, Tb: 1.3, capPc: 1400, demand: 1450, gapTol: 80, signal: { cycle: 70, green: 36, satH: 1.9 }, viewUp: 240, minPx: 1.4, tick: 50, discMargin: 25 },
+};
+const roadLen = c => c.xEnd + c.taper + 80;
+// Planning capacity of the single open lane, adjusted for trucks with the HCM heavy-vehicle factor (E_T = 2.0)
+const E_T = 2.0;
+const capVeh = c => c.capPc / (1 + c.hv * (E_T - 1));
+// Closing-lane vehicles may roll into the first third of the taper while shifting over, hugging the cone line
+const laneEnd = c => c.xEnd + c.taper / 3;
+// Lengths: AASHTO P (5.8 m design, 4.8 m typical), SU-30/MSU ~9-10 m, WB-62/WB-20 ~21-22 m
+const VCLASS = {
+  car:    { len: 4.8, w: 1.9 },
+  medium: { len: 10,  w: 2.6 },
+  large:  { len: 21,  w: 2.6 },
+};
+function classParams(d, cls) {
+  if (cls === 'car') return d;
+  const big = cls === 'large';
+  return { ...d,
+    T: d.T + (big ? 0.5 : 0.3),
+    s0: d.s0 + 0.5,
+    a: (big ? 0.5 : 0.8) * clamp(1 + 0.1 * (d.a - BASE.a) / 0.3, 0.8, 1.2),
+    b: big ? 1.5 : 1.8,
+    v0: Math.min(d.v0, (big ? 105 : 110) / 3.6), // Ontario trucks are speed-limited to 105 km/h
+  };
+}
+
+// Population means, calibrated so a car-only stream discharges at the target work zone capacity
+const BASE = { T: 1.2, s0: 1.5, a: 1.4 }; // T is set per context (CTX.Tb), like separate Vissim driving behaviour sets
+function driverParams(z, vLimit, Tb = BASE.T) {
+  return {
+    T: clamp(Tb - 0.35 * z, 0.6, 2.4),
+    s0: clamp(BASE.s0 - 0.5 * z, 0.8, 3.5),
+    a: clamp(BASE.a + 0.3 * z, 0.6, 2.5),
+    b: 2.0,
+    v0: vLimit * clamp(1 + 0.06 * z, 0.85, 1.2),
+    p: clamp(0.5 - 0.35 * z, 0, 1),
+    bsafe: clamp(3 + z, 1.5, 6),
+  };
+}
+function yieldProb(z, mode, mergerLate, recent, comply = true) {
+  let c = mode === 'zipper' && comply ? 1.5 : (mergerLate ? -0.3 : 0.5); // zipper followers take turns; everyone else treats a late merger as a cutter
+  if (recent) c -= 1.2;
+  return sigmoid(-1.8 * (z - c));
+}
+function idmAcc(d, v, gap, dv, Tm = 1) {
+  const s = d.s0 + Math.max(0, v * d.T * Tm + v * dv / (2 * Math.sqrt(d.a * d.b)));
+  const g = Math.max(gap, 0.2);
+  return clamp(d.a * (1 - Math.pow(v / d.v0, 4) - (s / g) * (s / g)), -9, d.a);
+}
+const freeAcc = (d, v) => d.a * (1 - Math.pow(v / d.v0, 4));
+// arrays are sorted by x descending; returns first index with arr[i].x < x
+function findIdx(arr, x) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m].x >= x) lo = m + 1; else hi = m; } return lo; }
+
+// ---- Diverging driver palette: blue (defensive) - grey - red (aggressive) ----
+const STOPS = [[-2.5, [63, 127, 214]], [-1, [143, 179, 227]], [0, [207, 208, 202]], [1, [240, 160, 138]], [2.5, [224, 68, 47]]];
+const ZCOL = [];
+for (let k = 0; k <= 60; k++) {
+  const z = -3 + k * 0.1; let i = 0;
+  while (i < STOPS.length - 2 && z > STOPS[i + 1][0]) i++;
+  const [z0, c0] = STOPS[i], [z1, c1] = STOPS[i + 1];
+  const f = clamp((z - z0) / (z1 - z0), 0, 1);
+  ZCOL.push(`rgb(${c0.map((c, j) => Math.round(c + (c1[j] - c) * f)).join(',')})`);
+}
+const zColor = z => ZCOL[clamp(Math.round((z + 3) * 10), 0, 60)];
+
+// ---- Simulation ----
+class Sim {
+  constructor(key, mode, panel) {
+    this.key = key; this.mode = mode; this.c = CTX[key];
+    this.canvas = panel.querySelector('canvas'); this.statsEl = panel.querySelector('.stats');
+    this.ctx2d = this.canvas.getContext('2d');
+  }
+  reset(seed) {
+    this.rng = mulberry32(seed * 7919 + (this.key === 'urban' ? 104729 : 0));
+    this.t = 0; this.lanes = [[], []]; this.backlog = [[], []];
+    this.nextArr = 0; this.nextEntry = [0, 0]; this.id = 0;
+    this.cross = []; this.exits = []; this.forced = []; this.hard = []; this.flashes = [];
+    this.green = 0; this.blocked = 0; this.qEMA = 0; this.turn = 'merge';
+  }
+  genArrivals() {
+    const c = this.c, rate = c.demand / 3600, mean = 1 / rate, minH = Math.min(0.6, mean * 0.5);
+    while (this.nextArr <= this.t) {
+      const r = this.rng, g = gauss(r), uC = r(), uL = r(), uH = r(), uK = r();
+      const z = clamp(P.mu + P.sigma * g, -3, 3);
+      const cls = uK < c.hv * c.medShare ? 'medium' : uK < c.hv ? 'large' : 'car';
+      const comply = uC < P.comply, late = this.mode === 'zipper' ? (comply || z > 1) : z > 1;
+      const lane = uL < 0.5 ? 0 : 1;
+      this.backlog[lane].push({ id: ++this.id, z, cls, d: classParams(driverParams(z, c.vLimit, c.Tb), cls), late, comply, lane, ly: lane, x: 0, v: 0, acc: 0, len: VCLASS[cls].len,
+        tArr: this.nextArr, wait: 0, cool: 0, letIn: -99, dec: -1, decYes: false, brk: false, wm: false });
+      this.nextArr += minH - (mean - minH) * Math.log(1 - uH);
+    }
+  }
+  enter(dt) {
+    const c = this.c, sig = c.signal;
+    const green = sig ? (this.t % sig.cycle) < sig.green : true;
+    let blocked = false;
+    for (let l = 0; l < 2; l++) {
+      const q = this.backlog[l];
+      const arr = this.lanes[l], last = arr[arr.length - 1];
+      if (green && q.length && last && last.x < 15 && last.v < 3) blocked = true; // queue has reached the stop bar
+      if (!q.length || !green || this.t < this.nextEntry[l]) continue;
+      const veh = q[0];
+      let v = sig ? Math.min(veh.d.v0, 9) : veh.d.v0;
+      if (last) {
+        const gap = last.x - last.len;
+        if (gap < veh.d.s0 + 1) continue;
+        v = Math.min(v, Math.max(0, (gap - veh.d.s0) / (veh.d.T * 0.8)), last.v + 3);
+      }
+      q.shift(); veh.x = 0; veh.v = v; arr.push(veh);
+      this.nextEntry[l] = this.t + (sig ? sig.satH : 0.3);
+    }
+    if (sig) {
+      const k = Math.exp(-dt / 300); this.green *= k; this.blocked *= k;
+      if (green) { this.green += dt; if (blocked) this.blocked += dt; }
+    }
+  }
+  step(dt) {
+    const c = this.c, t = this.t;
+    this.genArrivals(); this.enter(dt);
+    const L0 = this.lanes[0], L1 = this.lanes[1];
+    L0.sort((a, b) => b.x - a.x); L1.sort((a, b) => b.x - a.x);
+    for (const v of L1) v.wm = v.late ? v.x > c.xEnd - c.zone : true; // early mergers look for a gap right away
+
+    // closing lane
+    for (let i = 0; i < L1.length; i++) {
+      const v = L1[i], ld = L1[i - 1];
+      let a = ld ? idmAcc(v.d, v.v, ld.x - ld.len - v.x, v.v - ld.v) : freeAcc(v.d, v.v);
+      a = Math.min(a, idmAcc(v.d, v.v, laneEnd(c) - v.x, v.v)); // lane end acts as a stopped obstacle
+      if (v.wm && !(this.mode === 'conv' && v.z > 1.3)) { // gap seeking: match the target lane, easing back when there's no room ahead
+        const j = findIdx(L0, v.x), adj = L0[j - 1], beside = L0[j];
+        let target = Infinity;
+        if (beside && beside.x > v.x - v.len - 0.5) target = Math.max(0, beside.v - (this.mode === 'zipper' ? 3 : 1.5)); // a through car is alongside: drop back and tuck in behind it
+        else if (adj) target = adj.x - adj.len - v.x < v.d.s0 + 0.5 * v.d.T * v.v ? Math.max(0, adj.v - 1) : adj.v + 1;
+        if (v.v > target) a = Math.min(a, 0.8 * (target - v.v));
+      }
+      v.acc = a;
+    }
+    // zipper turn: if the car just ahead of the lead merger merged at the taper, the through lane goes next
+    { const M = L1[0], A = M && L0[findIdx(L0, M.x - M.len) - 1]; this.turn = A && A.zm ? 'thru' : 'merge'; } // once a through car draws alongside, the lead merger tucks in behind it
+    // through lane: yield or fight
+    for (let i = 0; i < L0.length; i++) {
+      const v = L0[i], ld = L0[i - 1];
+      let Tm = 1, aY = Infinity;
+      const m = L1[findIdx(L1, v.x) - 1];
+      // yield to a merger that has room ahead to move into, or to one that has waited long enough that someone makes room
+      // zipper turn-taking: the driver behind the lead merger takes their turn letting it in, even before the gap ahead has opened
+      // a lead car stopped at the end of the closing lane: pressure on the driver behind it grows the longer it waits
+      const stuck = !!m && m === L1[0] && m.v < 2 && laneEnd(c) - m.x < 20;
+      if (this.mode === 'zipper') {
+        // zipper: one from each lane in turn. When it's the closing lane's turn, the through driver directly behind the lead merger
+        // decides whether to let it in: drivers who follow the signs usually do, the rest treat it as a cutter
+        const m = L1[0], stuck = !!m && m.v < 2 && laneEnd(c) - m.x < 20; // the lead car in the closing lane, seen past the queue behind it
+        if (m && m.wm && m.x > v.x && m.x - m.len - v.x < 12 + 1.5 * v.v && (!ld || ld.x > m.x - m.len) && (this.turn === 'merge' || m.wait > 60)) { // close enough to matter, far enough back to slow in time
+          const key = -(m.id * 16 + (stuck ? 1 + Math.min(14, Math.floor(m.wait / 6)) : 0)); // decide again every 6 s the lead car stays stuck
+          if (v.dec !== key) { v.dec = key; v.decYes = pairRand(v.id, key) < yieldProb(v.z - (m.cls === 'car' ? 0 : 0.8) - (stuck ? Math.min(2, m.wait / 10) : 0), 'zipper', true, false, v.comply); }
+          const gm = m.x - m.len - v.x;
+          if (v.decYes || v.yTo === m.id) { if (gm > 0.5) { const ay = idmAcc(v.d, v.v, gm, v.v - m.v); if (v.yTo === m.id || ay > -3 || v.v < 5) { aY = Math.max(ay, -4); v.yTo = m.id; } } }
+          else if (v.z > 0.5) Tm = 0.55;
+        }
+        const a = ld ? idmAcc(v.d, v.v, ld.x - ld.len - v.x, v.v - ld.v, Tm) : freeAcc(v.d, v.v);
+        v.acc = Math.min(a, aY);
+        continue;
+      }
+      const myTurn = !!m && m === L1[0] && stuck && (!ld || m.x - m.len < ld.x);
+      if (m && m.wm && m.x - m.len - v.x < c.look && (!ld || ld.x - ld.len - m.x > 0.5 || myTurn || (m.wait > 60 && m.x - m.len < ld.x))) {
+        const key = myTurn ? -(m.id * 16 + (stuck ? 1 + Math.min(14, Math.floor(m.wait / 6)) : 0)) : m.id; // decide again at my turn, and every 6 s it stays stuck
+        if (v.dec !== key) { v.dec = key; v.decYes = pairRand(v.id, key) < yieldProb(v.z - (m.cls === 'car' ? 0 : 0.8) - (stuck ? Math.min(2, m.wait / 10) : 0), this.mode, m.late, this.mode === 'conv' && t - v.letIn < 15, this.mode === 'conv' || v.comply); } // drivers give way to trucks more readily
+        const gm = m.x - m.len - v.x;
+        if (v.decYes || m.wait > 60) { if (gm > 0.5) { const ay = idmAcc(v.d, v.v, gm, v.v - m.v); if (v.yTo === m.id) aY = Math.max(ay, -3); else if (ay > -3) { aY = ay; v.yTo = m.id; } } } // once I've started making room, keep holding back
+        else if (v.z > 0.5) Tm = 0.55;
+      }
+      const a = ld ? idmAcc(v.d, v.v, ld.x - ld.len - v.x, v.v - ld.v, Tm) : freeAcc(v.d, v.v);
+      v.acc = Math.min(a, aY);
+    }
+    // mandatory merges 1 -> 0
+    for (let i = 0; i < L1.length; i++) {
+      const v = L1[i]; if (!v.wm) continue;
+      const j = findIdx(L0, v.x), Ld = L0[j - 1], F = L0[j];
+      const gL = Ld ? Ld.x - Ld.len - v.x : Infinity, gF = F ? v.x - v.len - F.x : Infinity;
+      if (gL < 0.5 || gF < 0.5) continue;
+      if (this.mode === 'zipper' && v.late && v.z < 1.3 && F && gF < 10 + F.v * F.d.T && (v !== L1[0] || this.turn !== 'merge') && v.wait < 90) continue; // zipper: wait for my turn unless there's a clear gap
+      const u = 1 + 0.6 * clamp(1 - (laneEnd(c) - v.x) / c.urgLen, 0, 1) + Math.min(1, v.wait / 10);
+      const bs = Math.min(6.5, v.d.bsafe * u);
+      const aF = F ? idmAcc(F.d, F.v, gF, F.v - v.v) : 0;
+      const aC = Ld ? idmAcc(v.d, v.v, gL, v.v - Ld.v) : 0;
+      const letsMeIn = F && F.yTo === v.id;
+      if (aF < -(letsMeIn ? Math.max(bs, 4) : F && F.cls !== 'car' ? Math.min(bs, 1.5) : bs) || aC < -(letsMeIn ? Math.max(bs, 3) : bs)) continue; // avoid cutting in tight ahead of a truck; a driver letting me in brakes harder
+      L1.splice(i, 1); i--; v.lane = 0; L0.splice(j, 0, v);
+      if (v.x > c.xEnd - c.zone - 10) { v.zm = true; this.turn = 'thru'; } // a car merged at the taper: next it's the through lane's turn
+      if (F) { F.letIn = t; if (aF < -3) { this.forced.push(t); this.flashes.push({ x: v.x, t }); } }
+      v.acc = Math.min(v.acc, aC); v.wait = 0;
+    }
+    // discretionary lane choice upstream of the merge zone, both ways, for drivers who plan to merge late (MOBIL)
+    for (const [A, B] of [[0, 1], [1, 0]]) {
+      const LA = this.lanes[A], LB = this.lanes[B];
+      for (let i = 0; i < LA.length; i++) {
+        const v = LA[i];
+        if (!v.late || v.x > c.xEnd - c.zone - c.discMargin || t < v.cool) continue;
+        const j = findIdx(LB, v.x), Ld = LB[j - 1], F = LB[j];
+        const gL = Ld ? Ld.x - Ld.len - v.x : Infinity, gF = F ? v.x - v.len - F.x : Infinity;
+        if (gL < 3 || gF < 3) continue;
+        let aC = Ld ? idmAcc(v.d, v.v, gL, v.v - Ld.v) : freeAcc(v.d, v.v);
+        if (B === 1) aC = Math.min(aC, idmAcc(v.d, v.v, laneEnd(c) - v.x, v.v));
+        const aFn = F ? idmAcc(F.d, F.v, gF, F.v - v.v) : 0;
+        if (aFn < -v.d.bsafe) continue;
+        const Fo = LA[i + 1], Lo = LA[i - 1];
+        const dO = Fo ? (Lo ? idmAcc(Fo.d, Fo.v, Lo.x - Lo.len - Fo.x, Fo.v - Lo.v) : freeAcc(Fo.d, Fo.v)) - Fo.acc : 0;
+        const dN = F ? aFn - F.acc : 0;
+        if (aC - v.acc + v.d.p * (dN + dO) > 0.4) {
+          LA.splice(i, 1); i--; v.lane = B; LB.splice(j, 0, v); v.cool = t + 6; v.acc = aC;
+        }
+      }
+    }
+    // integrate
+    for (let l = 0; l < 2; l++) {
+      const arr = this.lanes[l];
+      for (let i = 0; i < arr.length; i++) {
+        const v = arr[i];
+        if (v.acc < -4 && !v.brk) this.hard.push(t);
+        v.brk = v.acc < -4;
+        const nv = Math.max(0, v.v + v.acc * dt), ox = v.x;
+        v.x += Math.max(0, (v.v + nv) / 2 * dt); v.v = nv;
+        const ld = arr[i - 1];
+        if (ld && v.x > ld.x - ld.len - 0.3) { v.x = ld.x - ld.len - 0.3; v.v = Math.min(v.v, ld.v); }
+        if (l === 1 && v.x > laneEnd(c) - 0.2) { v.x = laneEnd(c) - 0.2; v.v = 0; }
+        if (l === 0 && ox < laneEnd(c) && v.x >= laneEnd(c)) this.cross.push(t); // counted where the closing lane runs out
+        if (l === 1 && v.wm && v.v < 1) v.wait += dt; else v.wait = Math.max(0, v.wait - dt);
+        v.ly += clamp(v.lane - v.ly, -dt / 2, dt / 2);
+      }
+    }
+    const RL = roadLen(c);
+    while (L0.length && L0[0].x > RL) {
+      const v = L0.shift();
+      this.exits.push({ t, d: Math.max(0, (t - v.tArr) - RL / v.d.v0) });
+    }
+    this.t += dt;
+    const q = this.queueLen();
+    this.qEMA += (q - this.qEMA) * Math.min(1, dt / 12);
+    if (Math.round(this.t / dt) % 25 === 0) this.prune();
+  }
+  prune() {
+    const cut = this.t - 300;
+    const drop = a => { let k = 0; while (k < a.length && (a[k].t ?? a[k]) < cut) k++; if (k) a.splice(0, k); };
+    drop(this.cross); drop(this.exits); drop(this.forced); drop(this.hard);
+    this.flashes = this.flashes.filter(f => this.t - f.t < 2);
+  }
+  queueLen() {
+    const c = this.c; let best = 0;
+    for (let l = 0; l < 2; l++) {
+      let last = c.xEnd, found = false;
+      for (const v of this.lanes[l]) {
+        if (v.x > c.xEnd + 5) continue;
+        if (last - v.x > c.gapTol) break;
+        if (v.v < c.vLimit / 3) { last = v.x; found = true; }
+      }
+      if (!found) { best = Math.max(best, this.backlog[l].length * 7); continue; }
+      best = Math.max(best, c.xEnd - last + this.backlog[l].length * 7);
+    }
+    return best;
+  }
+  metrics() {
+    const win = Math.min(300, Math.max(this.t, 1));
+    const delay = this.exits.length ? this.exits.reduce((s, e) => s + e.d, 0) / this.exits.length : 0;
+    return {
+      queue: this.qEMA,
+      thru: this.cross.length * 3600 / win,
+      delay,
+      forced: this.forced.length * 3600 / win,
+      hard: this.hard.length * 3600 / win,
+      spill: this.green > 1 ? this.blocked / this.green : 0,
+    };
+  }
+  draw(theme) {
+    const cv = this.canvas, g = this.ctx2d, c = this.c;
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = theme.surface; g.fillRect(0, 0, W, H);
+    // view: the approach plus the full taper; on narrow screens keep 35% for the taper
+    const xR = c.xEnd + c.taper + 40;
+    let px = W / (xR - (c.xEnd - c.viewUp)), xStart = xR - W / px;
+    if (px < c.minPx) { px = c.minPx; xStart = c.xEnd - (W / px) * 0.65; }
+    const sx = x => (x - xStart) * px;
+    const laneH = 12, y0 = 32, roadH = laneH * 2, vs = laneH / c.laneW; // across-road px per metre
+    const yb = y0 + roadH;
+    g.fillStyle = theme.asphalt; g.fillRect(0, y0 - 2, W, roadH + 4);
+    // closed lane: taper from the lane edge at xEnd to the lane line at xEnd + taper
+    const xt = sx(c.xEnd), xe = sx(c.xEnd + c.taper);
+    g.save(); g.beginPath(); g.moveTo(xt, yb); g.lineTo(xe, y0 + laneH); g.lineTo(W + 40, y0 + laneH); g.lineTo(W + 40, yb + 2); g.lineTo(xt, yb + 2); g.closePath(); g.clip();
+    for (let x = xt - 30; x < W + 30; x += 8) { g.fillStyle = Math.round((x - xt) / 8) % 2 ? '#f08a2c' : '#f4efe6'; g.beginPath(); g.moveTo(x, yb + 2); g.lineTo(x + 4, yb + 2); g.lineTo(x + 18, y0 + laneH); g.lineTo(x + 14, y0 + laneH); g.fill(); }
+    g.restore();
+    g.fillStyle = '#ff9a1f';
+    const nC = Math.max(4, Math.round(c.taper / c.coneSp));
+    for (let k = 0; k <= nC; k++) { const f = k / nC; g.beginPath(); g.arc(xt + (xe - xt) * f, yb - laneH * f, 1.8, 0, 7); g.fill(); }
+    if (this.mode === 'zipper') { g.fillStyle = 'rgba(240,138,44,0.18)'; const zx = sx(c.xEnd - c.zone); g.fillRect(zx, y0, xt - zx, roadH); }
+    // markings
+    g.strokeStyle = '#ecebe4'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(0, y0); g.lineTo(W, y0); g.stroke();
+    g.beginPath(); g.moveTo(0, yb); g.lineTo(xt, yb); g.stroke();
+    g.setLineDash([3 * px + 2, 9 * px + 3]); g.beginPath(); g.moveTo(0, y0 + laneH); g.lineTo(xt, y0 + laneH); g.stroke(); g.setLineDash([]);
+    // signal (urban)
+    const sigX = sx(0);
+    if (c.signal && sigX >= 0) {
+      const gr = (this.t % c.signal.cycle) < c.signal.green;
+      g.fillStyle = '#ecebe4'; g.fillRect(sigX, y0, 2, roadH);
+      g.fillStyle = gr ? '#34c759' : '#ff3b30'; g.beginPath(); g.arc(sigX + 7, y0 - 11, 4.5, 0, 7); g.fill();
+    }
+    // signs
+    g.font = '800 10px Overpass, system-ui, sans-serif'; g.textBaseline = 'middle';
+    const sign = (x, text, align) => {
+      const w = g.measureText(text).width + 10; let left = align === 'right' ? x - w : x;
+      left = clamp(left, 2, W - w - 2);
+      g.fillStyle = '#f08a2c'; g.fillRect(left, 6, w, 15); g.fillStyle = '#16181b'; g.fillText(text, left + 5, 14);
+    };
+    const leftX = c.signal && sigX >= 0 ? sigX + 16 : 4;
+    if (this.mode === 'zipper') { sign(leftX, 'USE BOTH LANES'); sign(xt, 'MERGE HERE · TAKE TURNS', 'right'); }
+    else { sign(leftX, c.signal ? 'RIGHT LANE ENDS' : 'RIGHT LANE CLOSED AHEAD'); sign(xt, 'MERGE LEFT', 'right'); }
+    // vehicles, drawn to scale (length along the road, width across the lane)
+    for (let l = 0; l < 2; l++) for (const v of this.lanes[l]) {
+      const xf = sx(v.x); if (xf < -40 || xf - v.len * px > W + 40) continue;
+      const len = Math.max(v.len * px, 2.5), w = VCLASS[v.cls].w * vs;
+      // in the taper, a closing-lane vehicle shifts left so its right side stays inside the cone line
+      const f = v.lane === 1 ? clamp((v.x - c.xEnd) / c.taper, 0, 1) : 0;
+      const y = y0 + laneH * (Math.min(v.ly, 1 - f) + 0.5) - w / 2;
+      g.fillStyle = zColor(v.z); g.fillRect(xf - len, y, len, w);
+      if (v.cls === 'large') { g.fillStyle = theme.asphalt; g.fillRect(xf - 6.2 * px, y, Math.max(1, 0.6 * px), w); } // cab / trailer gap
+      if (v.acc < -1.5) { g.fillStyle = '#ff3b30'; g.fillRect(xf - len, y, 1.5, w); }
+    }
+    for (const f of this.flashes) {
+      const age = (this.t - f.t) / 2; if (age > 1) continue;
+      g.strokeStyle = `rgba(255,210,63,${1 - age})`; g.lineWidth = 2;
+      g.beginPath(); g.arc(sx(f.x), y0 + laneH, 5 + age * 14, 0, 7); g.stroke();
+    }
+    // queue beyond view
+    const qx = c.xEnd - this.qEMA;
+    if (qx < xStart && this.qEMA > 20) {
+      const extra = xStart - qx;
+      const txt = '◂ queue continues ' + (extra >= 1000 ? (extra / 1000).toFixed(1) + ' km' : Math.round(extra) + ' m');
+      g.font = '600 11px "Overpass Mono", ui-monospace, monospace';
+      const w = g.measureText(txt).width + 10;
+      g.fillStyle = theme.bad; g.fillRect(0, yb + 5, w, 16); g.fillStyle = theme.surface; g.fillText(txt, 5, yb + 13.5);
+    }
+    // distance ticks relative to the merge point (start of taper)
+    g.font = '400 10px "Overpass Mono", ui-monospace, monospace'; g.fillStyle = theme.muted; g.strokeStyle = theme.line; g.lineWidth = 1;
+    const ty = yb + 30, step = c.tick * Math.max(1, Math.ceil(64 / (c.tick * px)));
+    const tick = (x, label) => { g.beginPath(); g.moveTo(x, ty - 7); g.lineTo(x, ty - 3); g.stroke(); const w = g.measureText(label).width; g.fillText(label, clamp(x - w / 2, 0, W - w), ty + 6); };
+    for (let d = step; c.xEnd - d >= xStart; d += step) { const x = sx(c.xEnd - d); if (x < 20) break; tick(x, '−' + (d >= 1000 ? (d / 1000) + ' km' : d + ' m')); }
+    tick(xt, 'taper start');
+    if (xe < W - 20 && xe - xt > 70) tick(xe, `taper end +${c.taper} m`);
+  }
+}
+
+// ---- Wire up ----
+const sims = [...document.querySelectorAll('.panel')].map(p => new Sim(p.dataset.ctx, p.dataset.mode, p));
+const byKey = (k, m) => sims.find(s => s.key === k && s.mode === m);
+let seed = 1, playing = true, speed = 5, accT = 0;
+const DT = 0.2, WARM = 600; // open on a road that has already had 10 minutes of traffic
+
+function restart(newSeed) {
+  if (newSeed) seed = (seed * 48271 + 11) % 2147483647;
+  for (const s of sims) { s.reset(seed); for (let k = 0; k < WARM / DT; k++) s.step(DT); }
+  updateStats(); drawAll();
+}
+
+const $ = id => document.getElementById(id);
+const ctlEls = { mu: $('mu'), sigma: $('sigma'), comply: $('comply') };
+function muLabel(m) { if (m <= -0.8) return 'Very courteous'; if (m <= -0.3) return 'Courteous'; if (m < 0.3) return 'Typical'; if (m < 0.8) return 'Pushy'; return 'Road rage'; }
+const roadEls = { fwyDemand: $('fwyDemand'), urbDemand: $('urbDemand'), fwySpeed: $('fwySpeed'), fwyHv: $('fwyHv'), urbSpeed: $('urbSpeed'), urbHv: $('urbHv') };
+// OTM Book 7 taper length for a full lane closure, by speed (km/h -> m); speeds outside the table use the nearest entry
+const OTM_FWY = { 80: 220, 90: 250, 100: 300, 110: 300, 120: 300 }, OTM_URB = { 40: 60, 50: 60, 60: 85, 70: 155 };
+function readRoad() {
+  const F = CTX.freeway, U = CTX.urban;
+  F.vLimit = +roadEls.fwySpeed.value / 3.6; F.taper = OTM_FWY[roadEls.fwySpeed.value]; F.hv = +roadEls.fwyHv.value / 100;
+  U.vLimit = +roadEls.urbSpeed.value / 3.6; U.taper = OTM_URB[roadEls.urbSpeed.value]; U.hv = +roadEls.urbHv.value / 100;
+  F.demand = +roadEls.fwyDemand.value; U.demand = +roadEls.urbDemand.value;
+  for (const [K, C] of [['fwy', F], ['urb', U]]) {
+    const cap = capVeh(C), vc = C.demand / cap;
+    $(K + 'DemandOut').textContent = `${C.demand} veh/h · v/c ${vc.toFixed(2)}`;
+    $(K + 'CapHint').textContent = `Capacity of the open lane ≈ ${Math.round(cap / 10) * 10} veh/h (${C.capPc} pc/h, adjusted for trucks). v/c above 1 builds a queue.`;
+  }
+  $('fwySpeedOut').textContent = `${roadEls.fwySpeed.value} km/h · ${F.taper} m`;
+  $('urbSpeedOut').textContent = `${roadEls.urbSpeed.value} km/h · ${U.taper} m`;
+  $('fwyHvOut').textContent = roadEls.fwyHv.value + '%';
+  $('urbHvOut').textContent = roadEls.urbHv.value + '%';
+  $('fwySpec').textContent = `${roadEls.fwySpeed.value} km/h · ${F.xEnd / 1000} km of storage · ${F.taper} m taper · ${roadEls.fwyHv.value}% heavy vehicles`;
+  $('urbSpec').textContent = `${roadEls.urbSpeed.value} km/h · signal ${U.xEnd} m upstream · ${U.taper} m taper · ${roadEls.urbHv.value}% heavy vehicles`;
+}
+Object.values(roadEls).forEach(el => el.addEventListener('input', () => { readRoad(); drawAll(); drawBell(); }));
+function readControls() {
+  P.mu = +ctlEls.mu.value; P.sigma = +ctlEls.sigma.value; P.comply = +ctlEls.comply.value / 100;
+  $('muOut').textContent = `${muLabel(P.mu)} (${P.mu > 0 ? '+' : ''}${P.mu.toFixed(1)})`;
+  $('sigmaOut').textContent = `σ = ${P.sigma.toFixed(1)}`;
+  $('complyOut').textContent = `${Math.round(P.comply * 100)}%`;
+  drawBell();
+}
+Object.values(ctlEls).forEach(el => el.addEventListener('input', () => { readControls(); setPreset(null); }));
+function setPreset(name) { document.querySelectorAll('[data-preset]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.preset === name))); }
+document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+  const p = PRESETS[b.dataset.preset];
+  roadEls.fwyDemand.value = Math.round(p.vc * capVeh(CTX.freeway) / 50) * 50;
+  roadEls.urbDemand.value = Math.round(p.vc * capVeh(CTX.urban) / 50) * 50;
+  readRoad(); ctlEls.mu.value = p.mu; ctlEls.sigma.value = p.sigma; ctlEls.comply.value = p.comply;
+  readControls(); setPreset(b.dataset.preset); restart(false);
+}));
+$('play').addEventListener('click', () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play'; $('play').setAttribute('aria-pressed', String(playing)); });
+document.querySelectorAll('[data-speed]').forEach(b => b.addEventListener('click', () => {
+  speed = +b.dataset.speed; document.querySelectorAll('[data-speed]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+}));
+$('restart').addEventListener('click', () => restart(true));
+
+// ---- Stats ----
+const fmtQ = m => m >= 1000 ? (m / 1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+function updateStats() {
+  for (const s of sims) {
+    const m = s.metrics();
+    const rows = [['Queue', fmtQ(m.queue)], ['Through the merge', Math.round(m.thru) + ' veh/h'], ['Avg delay', Math.round(m.delay) + ' s'], ['Forced merges', Math.round(m.forced) + ' /h']];
+    if (s.c.signal) rows.push(['Green lost to spillback', Math.round(m.spill * 100) + '%']);
+    else rows.push(['Hard braking', Math.round(m.hard) + ' /h']);
+    s.statsEl.innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  }
+  for (const [key, el] of [['freeway', $('vFreeway')], ['urban', $('vUrban')]]) {
+    const z = byKey(key, 'zipper').metrics(), c = byKey(key, 'conv').metrics();
+    const cmp = (a, b, lowerBetter, label, unit) => {
+      const base = Math.max(Math.abs(b), unit);
+      const diff = (a - b) / base;
+      if (Math.abs(diff) < 0.1 || Math.abs(a - b) < unit) return `<li>${label}: about the same</li>`;
+      const better = lowerBetter ? diff < 0 : diff > 0;
+      const size = diff > 1 ? `${(a / base).toFixed(1)}× ` : `${Math.round(Math.abs(diff) * 100)}% `;
+      return `<li>${label}: <span class="${better ? 'better' : 'worse'}">${size}${diff < 0 ? 'lower' : 'higher'}</span> with the zipper</li>`;
+    };
+    el.innerHTML = `<b>Zipper vs. conventional, last 5 simulated minutes</b><ul>` +
+      cmp(z.queue, c.queue, true, 'Queue length', 25) +
+      cmp(z.thru, c.thru, false, 'Throughput', 60) +
+      cmp(z.delay, c.delay, true, 'Average delay', 5) +
+      cmp(z.forced + z.hard, c.forced + c.hard, true, 'Forced merges + hard braking', 6) +
+      (key === 'urban' ? cmp(z.spill, c.spill, true, 'Green lost to spillback', 0.03) : '') + `</ul>`;
+  }
+  const t = byKey('freeway', 'zipper').t;
+  $('clock').textContent = `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')} simulated`;
+}
+
+// ---- Bell curve ----
+const bell = $('bell');
+let hoverZ = null;
+function cssVars() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue(n).trim();
+  return { surface: v('--surface'), ink: v('--ink'), muted: v('--muted'), line: v('--line'), asphalt: v('--asphalt'), bad: v('--bad'), accent: v('--accent') };
+}
+function drawBell() {
+  const th = cssVars(), dpr = window.devicePixelRatio || 1;
+  const W = bell.clientWidth, H = bell.clientHeight;
+  bell.width = Math.round(W * dpr); bell.height = Math.round(H * dpr);
+  const g = bell.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = th.surface; g.fillRect(0, 0, W, H);
+  const padB = 22, padT = 8, sx = z => (z + 3) / 6 * W;
+  const pdf = z => Math.exp(-0.5 * ((z - P.mu) / P.sigma) ** 2) / P.sigma;
+  const scaleY = y => H - padB - y / pdf(P.mu) * (H - padB - padT);
+  for (let x = 0; x < W; x += 2) {
+    const z = x / W * 6 - 3; const y = scaleY(pdf(z));
+    g.fillStyle = zColor(z); g.fillRect(x, y, 2, H - padB - y);
+  }
+  g.strokeStyle = th.ink; g.lineWidth = 1.5; g.beginPath();
+  for (let x = 0; x <= W; x += 2) { const z = x / W * 6 - 3; const y = scaleY(pdf(z)); x ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke();
+  g.strokeStyle = th.line; g.beginPath(); g.moveTo(0, H - padB + 0.5); g.lineTo(W, H - padB + 0.5); g.stroke();
+  g.font = '400 10px "Overpass Mono", ui-monospace, monospace'; g.fillStyle = th.muted; g.textBaseline = 'top';
+  for (const z of [-2, -1, 0, 1, 2]) { const x = sx(z), t = (z > 0 ? '+' : '') + z; g.fillText(t, x - g.measureText(t).width / 2, H - padB + 6); }
+  // z = 1 threshold for always-late drivers
+  g.setLineDash([3, 3]); g.strokeStyle = th.ink; g.beginPath(); g.moveTo(sx(1), padT); g.lineTo(sx(1), H - padB); g.stroke(); g.setLineDash([]);
+  g.fillStyle = th.ink; g.font = '600 10px Overpass, system-ui, sans-serif'; g.fillText('always merge late →', Math.min(sx(1) + 4, W - 100), padT);
+  if (hoverZ !== null) { g.strokeStyle = th.accent; g.lineWidth = 2; g.beginPath(); g.moveTo(sx(hoverZ), padT); g.lineTo(sx(hoverZ), H - padB); g.stroke(); }
+  const z = hoverZ ?? P.mu, d = driverParams(z, CTX.freeway.vLimit, CTX.freeway.Tb);
+  const share = 1 - normCdf((z - P.mu) / P.sigma);
+  $('readout').innerHTML = `<b>${hoverZ === null ? 'Average driver in this mix' : 'This driver'} (z = ${z >= 0 ? '+' : ''}${z.toFixed(1)})</b>, more aggressive than ${Math.round((1 - share) * 100)}% of drivers.<br>` +
+    `Headway <b>${d.T.toFixed(2)} s</b> · standstill gap <b>${d.s0.toFixed(1)} m</b> · politeness <b>${d.p.toFixed(2)}</b> · accepts making others brake up to <b>${d.bsafe.toFixed(1)} m/s²</b><br>` +
+    `Lets a merger in: <b>${Math.round(yieldProb(z, 'zipper') * 100)}%</b> at a zipper if they follow the signs (<b>${Math.round(yieldProb(z, 'zipper', true, false, false) * 100)}%</b> if not), <b>${Math.round(yieldProb(z, 'conv', true) * 100)}%</b> for a late "cutter" at a conventional closure`;
+}
+function normCdf(x) { const t = 1 / (1 + 0.2316419 * Math.abs(x)); const d = 0.3989423 * Math.exp(-x * x / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return x > 0 ? 1 - p : p; }
+bell.addEventListener('pointermove', e => { const r = bell.getBoundingClientRect(); hoverZ = clamp((e.clientX - r.left) / r.width * 6 - 3, -3, 3); drawBell(); });
+bell.addEventListener('pointerleave', () => { hoverZ = null; drawBell(); });
+
+// ---- Parameter table ----
+(() => {
+  const rows = [
+    ['Desired time headway T', 'T = T̄ − 0.35z (T̄ = 1.35 s fwy, 1.3 s urban)', d => d.T.toFixed(2) + ' s', 'Vissim CC1 default 0.9 s, range 0.7–3.0 s (WisDOT); IDM typical 1.0–1.5 s'],
+    ['Standstill gap s₀', 's₀ = 1.5 − 0.5z', d => d.s0.toFixed(1) + ' m', 'IDM typical 2 m; Vissim CC0 default 1.5 m'],
+    ['Max acceleration a', 'a = 1.4 + 0.3z', d => d.a.toFixed(2) + ' m/s²', 'IDM typical 1.0–1.5 m/s²'],
+    ['Desired speed v₀', 'v₀ = limit · (1 + 0.06z)', d => (d.v0 * 3.6).toFixed(0) + ' km/h', 'At an 80 km/h work zone limit; desired-speed distribution (Vissim practice)'],
+    ['Politeness p', 'p = 0.5 − 0.35z', d => d.p.toFixed(2), 'MOBIL: 0 = selfish, 0.5 typical, 1 = altruistic'],
+    ['Safe braking imposed b_safe', 'b_safe = 3 + z', d => d.bsafe.toFixed(1) + ' m/s²', 'MOBIL typical 4 m/s²; Vissim accepted deceleration'],
+    ['Yields to zipper merger (follows signs)', 'see P(yield), c = 1.5', (d, z) => Math.round(yieldProb(z, 'zipper') * 100) + '%', 'Behavioural assumption'],
+  ];
+  const zs = [-1.5, 0, 1.5];
+  $('ptable').innerHTML = rows.map(([n, f, fn, b]) => `<tr><td>${n}</td><td class="mono">${f}</td>${zs.map(z => `<td class="mono">${fn(driverParams(z, 80 / 3.6, CTX.freeway.Tb), z)}</td>`).join('')}<td>${b}</td></tr>`).join('');
+})();
+
+// ---- Loop ----
+let theme = cssVars();
+const mq = window.matchMedia('(prefers-color-scheme: dark)');
+const refreshTheme = () => { theme = cssVars(); drawBell(); drawAll(); };
+mq.addEventListener?.('change', refreshTheme);
+new MutationObserver(refreshTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+window.addEventListener('resize', () => { drawBell(); drawAll(); });
+function drawAll() { for (const s of sims) s.draw(theme); }
+
+let last = performance.now(), statT = 0;
+function frame(now) {
+  const fdt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (playing) {
+    accT += fdt * speed;
+    let n = 0;
+    while (accT >= DT && n < 20) { for (const s of sims) s.step(DT); accT -= DT; n++; }
+    if (n === 20) accT = 0;
+    drawAll();
+  }
+  statT += fdt;
+  if (statT > 0.4) { statT = 0; if (playing) updateStats(); }
+  requestAnimationFrame(frame);
+}
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { playing = false; $('play').textContent = 'Play'; $('play').setAttribute('aria-pressed', 'false'); }
+readRoad();
+readControls();
+restart(false);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
