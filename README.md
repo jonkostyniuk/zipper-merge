@@ -38,6 +38,7 @@ explains its method, parameters and limits in full.
 | `llm-wiki/` | Agent-maintained continuity: current state, decisions, open questions |
 | `AGENTS.md` | Instructions and routing for coding agents |
 | `scripts/check_repo_context.py` | Context and page-script validation |
+| `LICENSE` | MIT License |
 
 ## Validate
 
@@ -59,3 +60,12 @@ parses, when Node.js is installed.
 
 Current results and caveats are summarized in
 [`llm-wiki/project-state.md`](llm-wiki/project-state.md).
+
+## Licence and disclaimer
+
+© 2026 Jon Kostyniuk. Released under the [MIT License](LICENSE).
+
+This project is for education and discussion only. It is not engineering advice
+and must not be used for design, operations or traffic control decisions. It is
+provided as is, without warranty, and the author accepts no liability for its
+use.
