@@ -35,6 +35,7 @@ explains its method, parameters and limits in full.
 | `zipper-merge-lab.html` | The simulation page: model, controls, method text |
 | `docs/research.md` | Impartial evidence review on zipper vs. early merge |
 | `docs/model-log.md` | Dated build and revision history of the model |
+| `docs/agents-setup-guidelines-2026-10-20v1.1.md` | Reference copy of the agent-context setup guidelines this repo follows (CC BY 4.0) |
 | `llm-wiki/` | Agent-maintained continuity: current state, decisions, open questions |
 | `AGENTS.md` | Instructions and routing for coding agents |
 | `scripts/check_repo_context.py` | Context and page-script validation |
@@ -63,7 +64,10 @@ Current results and caveats are summarized in
 
 ## Licence and disclaimer
 
-© 2026 Jon Kostyniuk. Released under the [MIT License](LICENSE).
+© 2026 Jon Kostyniuk. Released under the [MIT License](LICENSE), except
+[`docs/agents-setup-guidelines-2026-10-20v1.1.md`](docs/agents-setup-guidelines-2026-10-20v1.1.md), which carries its own
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) licence as stated in the
+file.
 
 This project is for education and discussion only. It is not engineering advice
 and must not be used for design, operations or traffic control decisions. It is

@@ -39,6 +39,7 @@ task needs.
 | Current handoff and headline results | `llm-wiki/project-state.md` |
 | Durable choices or unresolved matters | `llm-wiki/decisions.md` or `llm-wiki/open-questions.md` |
 | Preview or validation | `README.md` and `Makefile` |
+| Agent-context conventions (this file, `llm-wiki/`, checks) | `docs/agents-setup-guidelines-2026-10-20v1.1.md` |
 
 Do not read the whole model log or the full page for routine orientation.
 

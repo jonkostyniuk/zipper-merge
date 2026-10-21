@@ -24,6 +24,7 @@ LOCAL_PATH_RE = re.compile(r"/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/")
 VALID_STATUSES = {"draft", "stable", "deprecated"}
 LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 TOP_LEVEL_KEY_RE = re.compile(r"^([A-Za-z0-9_-]+):(?:\s*(.*))?$")
+FENCE_RE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
 LOG_DATE_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
 
 errors: list[str] = []
@@ -77,7 +78,8 @@ def local_target(source: Path, raw_target: str) -> Path | None:
 
 
 def validate_links(path: Path) -> None:
-    text = path.read_text(encoding="utf-8")
+    # Links inside fenced code blocks are template examples, not live links.
+    text = FENCE_RE.sub("", path.read_text(encoding="utf-8"))
     for raw_target in LINK_RE.findall(text):
         target = local_target(path, raw_target)
         if target is not None and not target.exists():
